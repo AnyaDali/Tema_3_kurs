@@ -98,7 +98,7 @@ public:
         }
     }
 
-    li(const std::initializer_list<_Ty> &init_li, const allocator_type &__alloc = allocator_type())
+    li(const std::initializer_list<_Ty> &init_li, const allocator_type &__alloc = allocator_type()) : li(__alloc)
     {
         for (auto it = init_li.begin(); it != init_li.end(); ++it)
         {
@@ -106,6 +106,52 @@ public:
         }
     }
 
+    li(const li<_Ty, _Ty_Alloc> &obj) : sz(0)
+    {
+        if (traits::propagate_on_container_copy_assignment::value &&
+            alloc != obj.alloc)
+        {
+            alloc = obj.alloc;
+        }
+
+        tail = traits::allocate(alloc, 1);
+        head = tail;
+
+        for (li<_Ty, allocator_type>::iterator it = obj.begin(); it != obj.end(); ++it)
+        {
+            push_back(*it);
+        }
+    }
+
+    li<_Ty, _Ty_Alloc> &operator=(const li<_Ty, _Ty_Alloc> &obj)
+    {
+        if (this == &obj)
+            return *this;
+
+        clear();
+
+        if (traits::propagate_on_container_copy_assignment::value &&
+            alloc != obj.alloc)
+        {
+            alloc = obj.alloc;
+        }
+
+        for (li<_Ty, allocator_type>::iterator it = obj.begin(); it != obj.end(); ++it)
+        {
+            push_back(*it);
+        }
+
+        return *this;
+    }
+
+    ~li()
+    {
+        clear();
+
+        traits::deallocate(alloc, tail, 1);
+    }
+
+    bool empty() { return head == tail; }
 
     void clear()
     {
@@ -178,9 +224,9 @@ public:
 
     iterator end() const { return iterator(tail); }
 
-    const_iterator cbegin() const { return iterator(head); }
+    const_iterator cbegin() const { return const_iterator(head); }
 
-    const_iterator cend() const { return iterator(tail); }
+    const_iterator cend() const { return const_iterator(tail); }
 
     reverse_iterator rbegin() const { return reverse_iterator(tail); }
 
