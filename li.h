@@ -21,7 +21,7 @@ protected:
 
     using reb_alloc = typename std::allocator_traits<_Ty_Alloc>::template rebind_alloc<Node>;
     reb_alloc alloc; // аллокатор
-    using traits = std::allocator_traits<reb_alloc>;
+    using alloc_traits = std::allocator_traits<reb_alloc>;
 
     Node *head; // указатель на голову
     Node *tail; // указатель на хвост (сырая память, для итератора)
@@ -42,6 +42,17 @@ protected:
 
     public:
         _common_iterator(value_type ptr) : ptr(ptr) {}
+
+        _common_iterator(const _common_iterator &iter) : ptr(iter.ptr) {}
+
+        _common_iterator &operator=(const _common_iterator &iter)
+        {
+            if (this = &iter)
+                return *this;
+
+            ptr = iter.ptr;
+            return *this;
+        }
 
         _common_iterator &operator++()
         {
@@ -80,13 +91,15 @@ protected:
 
         bool operator!=(const _common_iterator &iter) const noexcept { return ptr != iter.ptr; }
 
+        std::conditional_t<_is_const, const _Ty *, _Ty *> operator->() { return ptr; }
+
         ~_common_iterator() {}
     };
 
 public:
     li(const allocator_type &__alloc = allocator_type()) : sz(0), alloc(__alloc)
     {
-        tail = traits::allocate(alloc, 1);
+        tail = alloc_traits::allocate(alloc, 1);
         head = tail;
     }
 
@@ -98,7 +111,7 @@ public:
         }
     }
 
-    li(const std::initializer_list<_Ty> &init_li, const allocator_type &__alloc = allocator_type()) : li(__alloc)
+    li(std::initializer_list<_Ty> init_li, const _Ty_Alloc &__alloc = allocator_type()) : li(__alloc)
     {
         for (auto it = init_li.begin(); it != init_li.end(); ++it)
         {
@@ -108,19 +121,32 @@ public:
 
     li(const li<_Ty, _Ty_Alloc> &obj) : sz(0)
     {
-        if (traits::propagate_on_container_copy_assignment::value &&
+        if (alloc_traits::propagate_on_container_copy_assignment::value &&
             alloc != obj.alloc)
         {
             alloc = obj.alloc;
         }
 
-        tail = traits::allocate(alloc, 1);
+        tail = alloc_traits::allocate(alloc, 1);
         head = tail;
 
-        for (li<_Ty, allocator_type>::iterator it = obj.begin(); it != obj.end(); ++it)
+        for (li<_Ty, _Ty_Alloc>::iterator it = obj.begin(); it != obj.end(); ++it)
         {
             push_back(*it);
         }
+    }
+
+    li(li<_Ty, _Ty_Alloc> &&obj) : head(obj.head), tail(obj.tail), sz(obj.sz)
+    {
+        if (alloc_traits::propagate_on_container_copy_assignment::value &&
+            alloc != obj.alloc)
+        {
+            alloc = std::move(obj.alloc);
+        }
+
+        obj.tail = alloc_traits::allocate(obj.alloc, 1);
+        obj.head = obj.tail;
+        obj.sz = 0;
     }
 
     li<_Ty, _Ty_Alloc> &operator=(const li<_Ty, _Ty_Alloc> &obj)
@@ -130,7 +156,7 @@ public:
 
         clear();
 
-        if (traits::propagate_on_container_copy_assignment::value &&
+        if (alloc_traits::propagate_on_container_copy_assignment::value &&
             alloc != obj.alloc)
         {
             alloc = obj.alloc;
@@ -144,19 +170,38 @@ public:
         return *this;
     }
 
+    li<_Ty, _Ty_Alloc> &operator=(li<_Ty, _Ty_Alloc> &&obj)
+    {
+        if (this == &obj)
+            return *this;
+
+        clear();
+
+        Node * ptr_tail = tail;
+
+        head = obj.head;
+        tail = obj.tail;
+        sz = obj.sz;
+    
+        obj.tail = ptr_tail;
+        obj.head = obj.tail;
+        obj.sz = 0;
+
+        return *this;
+    }
+
     ~li()
     {
         clear();
 
-        traits::deallocate(alloc, tail, 1);
+        alloc_traits::deallocate(alloc, tail, 1);
     }
 
     bool empty() { return head == tail; }
 
     void clear()
     {
-        size_t size_el = sz;
-        for (size_t i = 0; i < size_el; ++i)
+        while (!empty())
         {
             pop_back();
         }
@@ -166,8 +211,8 @@ public:
     {
         if (head == tail)
         {
-            head = traits::allocate(alloc, 1);
-            traits::construct(alloc, &head->val, __val);
+            head = alloc_traits::allocate(alloc, 1);
+            alloc_traits::construct(alloc, &head->val, __val);
             head->next = tail;
             head->prev = tail;
 
@@ -176,12 +221,61 @@ public:
         }
         else
         {
-            Node *cur = traits::allocate(alloc, 1);
-            traits::construct(alloc, &cur->val, __val);
+            Node *cur = alloc_traits::allocate(alloc, 1);
+            alloc_traits::construct(alloc, &cur->val, __val);
             cur->next = tail;
             cur->prev = tail->prev;
             tail->prev->next = cur;
             tail->prev = cur;
+        }
+        ++sz;
+    }
+
+    void push_back(_Ty &&__val)
+    {
+        if (head == tail)
+        {
+            head = alloc_traits::allocate(alloc, 1);
+            alloc_traits::construct(alloc, &head->val, std::move(__val));
+            head->next = tail;
+            head->prev = tail;
+
+            tail->prev = head;
+            tail->next = nullptr;
+        }
+        else
+        {
+            Node *cur = alloc_traits::allocate(alloc, 1);
+            alloc_traits::construct(alloc, &cur->val, std::move(__val));
+            cur->next = tail;
+            cur->prev = tail->prev;
+            tail->prev->next = cur;
+            tail->prev = cur;
+        }
+        ++sz;
+    }
+
+    template <typename... Args>
+    void emplace_back(Args &&...args)
+    {
+        Node *new_ptr = alloc_traits::allocate(alloc, 1);
+        alloc_traits::construct(alloc, new_ptr, std::forward<Args>(args)...);
+        if (head == tail)
+        {
+            new_ptr->next = tail;
+            new_ptr->prev = nullptr;
+
+            tail->prev = new_ptr;
+            tail->next = nullptr;
+
+            head = new_ptr;
+        }
+        else
+        {
+            new_ptr->next = tail;
+            new_ptr->prev = tail->prev;
+            tail->prev->next = new_ptr;
+            tail->prev = new_ptr;
         }
         ++sz;
     }
@@ -193,19 +287,21 @@ public:
 
         if (tmp == head)
         {
-            traits::destroy(alloc, &tmp->val);
-            traits::deallocate(alloc, tmp, 1);
+            alloc_traits::destroy(alloc, &tmp->val);
+            alloc_traits::deallocate(alloc, tmp, 1);
 
             head = tail;
         }
         else
         {
+
             Node *ptr_prev = tmp->prev;
+
             ptr_prev->next = tail;
             tail->prev = ptr_prev;
 
-            traits::destroy(alloc, &tmp->val);
-            traits::deallocate(alloc, tmp, 1);
+            alloc_traits::destroy(alloc, &tmp->val);
+            alloc_traits::deallocate(alloc, tmp, 1);
         }
         --sz;
     }
