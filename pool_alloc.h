@@ -1,110 +1,114 @@
 #ifndef POOL_ALLOC
 #define POOL_ALLOC
-#include <iostream>
+
+
+/* пул аллокатор (или стек аллокатор)
+    при создании выделяет память на заданное кол-во элеметов (пул)
+    гаранитруется, что этот лимит не будет превышен
+    из пула могут "черпать память" сразу несколько аллокаторов
+    память не очищается с вызовом deallocate (т.е)  
+    очистка пула происхоидит при вызове деструктора аллокатора, который последний пользовался пулом.
+*/
 
 template <typename _Tp>
-class pool_alloc
+class pool_allocator
 {
     static_assert(!std::is_same_v<_Tp, void>, "Type of the allocator can not be void");
 
 public:
-    using allocator_type = pool_alloc<_Tp>;
+    using allocator_type = pool_allocator<_Tp>;
     using value_type = _Tp;
     using pointer = _Tp *;
     using const_pointer = const _Tp *;
     using difference_type = std::ptrdiff_t;
     using propagate_on_container_copy_assignment = std::false_type;
-    using propagate_on_container_move_assignment = std::false_type;
+    using propagate_on_container_move_assignment = std::true_type;
 
 protected:
-    static size_t max_size;        // максимальный размер памяти
-    static _Tp *cur;               // указатель на первый незанятый элемент
-    static size_t count_connected; // кол-во аллокаторов ссылающихся на пулл
-    static _Tp *head;              // указатель на начало выделенной памяти
+    static size_t max_size;          // максимальное кол-во элементов
+    static _Tp *cur;                 // указатель на первый незанятый элемент
+    static size_t __count_connected; // кол-во аллокаторов ссылающихся на пулл
+    static _Tp *head;                // указатель на начало выделенной памяти
+
+    void alloc_memory(size_t sz)
+    {
+        head = reinterpret_cast<_Tp *>(::operator new(sz));
+        cur = head;
+    }
 
 public:
-    pool_alloc()
+    pool_allocator()
     {
-        if (count_connected == 0)
+        if (__count_connected == 0)
         {
-            head = reinterpret_cast<_Tp *>(::operator new(sizeof(_Tp) * max_size));
-            cur = head;
+            alloc_memory(sizeof(_Tp) * max_size);
         }
-        ++count_connected;
+        ++__count_connected;
     }
 
-    // конструктор копирования
-    pool_alloc(const pool_alloc<_Tp> &alloc)
-    {
-        head = alloc.head;
-        cur = alloc.cur;
-        ++count_connected;
-    }
+    pool_allocator(const pool_allocator<_Tp> &alloc) { ++__count_connected; }
 
-    pool_alloc(pool_alloc<_Tp> &&alloc)
-    {
-        head = alloc.head;
-        cur = alloc.cur;
-        ++count_connected;
-    }
+    template <typename U>
+    pool_allocator(const pool_allocator<U> &__alloc) { ++__count_connected; }
 
-    pool_alloc<_Tp> &operator=(const pool_alloc<_Tp> &alloc)
+    template <typename U>
+    pool_allocator(const pool_allocator<U> &&alloc) { ++__count_connected; }
+
+    pool_allocator(pool_allocator<_Tp> &&alloc) { ++__count_connected; }
+
+    pool_allocator<_Tp> &operator=(const pool_allocator<_Tp> &alloc)
     {
-        if (this == &alloc)
-            return *this;
-        head = alloc.head;
-        cur = alloc.cur;
-        ++count_connected;
+        ++__count_connected;
         return *this;
     }
 
-    pool_alloc<_Tp> &operator=(pool_alloc<_Tp> &&alloc)
+    pool_allocator<_Tp> &operator=(pool_allocator<_Tp> &&alloc) { return *this; }
+
+    template <typename U>
+    pool_allocator<_Tp> &operator=(const pool_allocator<U> &alloc)
     {
-        if (this == &alloc)
-            return *this;
-        head = alloc.head;
-        cur = alloc.cur;
-        ++count_connected;
+        ++__count_connected;
         return *this;
     }
 
-    _Tp *allocate(size_t n) // не заифано переполнение для скорости вычислений.
+    template <typename U>
+    pool_allocator<_Tp> &operator=(const pool_allocator<U> &&alloc) { return *this; }
+
+    _Tp *allocate(size_t n)
     {
         _Tp *tmp = cur;
-        cur += n;
+        ++cur;
         return tmp;
     }
 
-    void deallocate(_Tp *, size_t) {}
+    void deallocate(_Tp *ptr, size_t n) {}
 
-    size_t get_max_size() const noexcept { return max_size; }
-
-    static size_t get_count_pointers() { return count_connected; }
-
-    ~pool_alloc()
+    ~pool_allocator()
     {
-        std::cout << "~pool_alloc\n";
-        if (count_connected == 1)
-            ::operator delete(head);
-        else
-            --count_connected;
+        if (__count_connected == 1)
+        {
+            ::operator delete(reinterpret_cast<void *>(head));
+        }
+        --__count_connected;
     }
-
-    bool operator==(const allocator_type &alloc) const { return head == alloc.head; }
-
-    bool operator!=(const allocator_type &alloc) const { return head != alloc.head; }
 };
 
-template <typename _Tp>
-size_t pool_alloc<_Tp>::count_connected = 0;
+template <typename T, typename U>
+bool operator==(const pool_allocator<T> &__alloc1, const pool_allocator<U> &__alloc2) { return true; }
+
+template <typename T, typename U>
+bool operator!=(const pool_allocator<T> &__alloc1, const pool_allocator<U> &__alloc2) { return false; }
 
 template <typename _Tp>
-size_t pool_alloc<_Tp>::max_size = 500'000;
+size_t pool_allocator<_Tp>::__count_connected = 0;
 
 template <typename _Tp>
-_Tp *pool_alloc<_Tp>::cur = nullptr;
+_Tp *pool_allocator<_Tp>::head = nullptr;
 
 template <typename _Tp>
-_Tp *pool_alloc<_Tp>::head = nullptr;
+_Tp *pool_allocator<_Tp>::cur = nullptr;
+
+template <typename _Tp>
+size_t pool_allocator<_Tp>::max_size = 500;
 
 #endif
