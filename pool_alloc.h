@@ -1,12 +1,12 @@
 #ifndef POOL_ALLOC
 #define POOL_ALLOC
 
-
+#include <type_traits>
 /* пул аллокатор (или стек аллокатор)
     при создании выделяет память на заданное кол-во элеметов (пул)
     гаранитруется, что этот лимит не будет превышен
     из пула могут "черпать память" сразу несколько аллокаторов
-    память не очищается с вызовом deallocate (т.е)  
+    память не очищается с вызовом deallocate (т.е)
     очистка пула происхоидит при вызове деструктора аллокатора, который последний пользовался пулом.
 */
 
@@ -41,6 +41,7 @@ public:
     {
         if (__count_connected == 0)
         {
+            std::cout << "alloc_memory\n";
             alloc_memory(sizeof(_Tp) * max_size);
         }
         ++__count_connected;
@@ -52,9 +53,9 @@ public:
     pool_allocator(const pool_allocator<U> &__alloc) { ++__count_connected; }
 
     template <typename U>
-    pool_allocator(const pool_allocator<U> &&alloc) { ++__count_connected; }
+    pool_allocator(const pool_allocator<U> &&alloc) {}
 
-    pool_allocator(pool_allocator<_Tp> &&alloc) { ++__count_connected; }
+    pool_allocator(pool_allocator<_Tp> &&alloc) {}
 
     pool_allocator<_Tp> &operator=(const pool_allocator<_Tp> &alloc)
     {
@@ -87,6 +88,7 @@ public:
     {
         if (__count_connected == 1)
         {
+            std::cout << "delete pool\n";
             ::operator delete(reinterpret_cast<void *>(head));
         }
         --__count_connected;
@@ -94,10 +96,10 @@ public:
 };
 
 template <typename T, typename U>
-bool operator==(const pool_allocator<T> &__alloc1, const pool_allocator<U> &__alloc2) { return true; }
+bool operator==(const pool_allocator<T> &__alloc1, const pool_allocator<U> &__alloc2)  { return std::is_same_v<U, T>; }
 
 template <typename T, typename U>
-bool operator!=(const pool_allocator<T> &__alloc1, const pool_allocator<U> &__alloc2) { return false; }
+bool operator!=(const pool_allocator<T> &__alloc1, const pool_allocator<U> &__alloc2) { return !(__alloc1 == __alloc2); }
 
 template <typename _Tp>
 size_t pool_allocator<_Tp>::__count_connected = 0;
