@@ -3,7 +3,6 @@
 
 #include "graph_model.h"
 
-
 class adj_colors
 {
 protected:
@@ -80,6 +79,7 @@ public:
                 adj_list[i].emplace_back(std::pair<int *, int>{_vec_ptr[el.second], el.second});
             }
         }
+        return *this;
     }
 
     void paint_the_vertex(size_t i, int val)
@@ -137,12 +137,21 @@ public:
         return -1;
     }
 
+    void clear()
+    {
+        for (auto &el : _vec_ptr)
+        {
+            delete el;
+        }
+
+        _vec_ptr.clear();
+
+        adj_list.clear();
+    }
+
     ~adj_colors()
     {
-        for (size_t i = 0; i < _vec_ptr.size(); ++i)
-        {
-            delete _vec_ptr[i];
-        }
+        clear();
     }
 };
 
