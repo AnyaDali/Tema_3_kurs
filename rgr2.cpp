@@ -1,7 +1,7 @@
 #include <iostream>
 #include <stack>
 #include <tuple>
-
+#include <vector>
 template <typename _Ty>
 class tree_interval
 {
@@ -27,7 +27,8 @@ protected:
 
     size_t sz;
 
-    _Ty __sum_init(int l, int r, const _Ty *__ptr)
+    template <typename _Iter>
+    _Ty __sum_init(int l, int r, _Iter __ptr)
     {
         _Ty s = _Ty();
         __ptr += l;
@@ -39,7 +40,8 @@ protected:
     }
 
 public:
-    tree_interval(const _Ty *__first, const _Ty *__last) : sz(__last - __first)
+    template <typename _Iter>
+    tree_interval(_Iter __first, _Iter __last) : sz(static_cast<size_t>(std::distance(__first, __last)))
     {
         int l = 0;
         int r = sz;
@@ -108,70 +110,64 @@ public:
         st.emplace(__interval{left_border, right_border}, tail);
         while (!st.empty())
         {
-            if (!st.empty())
+
+            __interval tmp_interval = std::get<0>(st.top());
+            tail = std::get<1>(st.top());
+            st.pop();
+
+            if (tmp_interval.l == tail->get_left_border() && tmp_interval.r == tail->get_right_border())
             {
-                __interval tmp_interval = std::get<0>(st.top());
-                tail = std::get<1>(st.top());
-                st.pop();
-
-                if (tmp_interval.l == tail->get_left_border() && tmp_interval.r == tail->get_right_border())
+                //  std::cout << "eq: " << sum << "  " << tmp_interval.l << "  " << tmp_interval.r << "  " << tail->val << std::endl;
+                sum += tail->val;
+                if (!st.empty())
                 {
-                    //  std::cout << "eq: " << sum << "  " << tmp_interval.l << "  " << tmp_interval.r << "  " << tail->val << std::endl;
-                    sum += tail->val;
-                    if (!st.empty())
-                    {
 
-                        tail = std::get<1>(st.top());
-                        tmp_interval = std::get<0>(st.top());
-                        st.pop();
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    tail = std::get<1>(st.top());
+                    tmp_interval = std::get<0>(st.top());
+                    st.pop();
                 }
-                if (tail->right != nullptr && tmp_interval.r > tail->right->get_left_border())
+                else
                 {
-
-                    if (tail->right != nullptr)
-                    {
-                        // std::cout << "right: " << sum << "  " << tail->right->get_left_border() << "  " << tmp_interval.r << "  " << tail->val << std::endl;
-                        st.emplace(__interval{tail->right->get_left_border(), tmp_interval.r}, tail->right);
-                    }
-                    else
-                        break;
-                }
-                if (tail->right != nullptr && !st.empty() && std::get<0>(st.top()).l == tail->right->get_left_border() && std::get<0>(st.top()).r == tail->right->get_right_border())
-                {
-                    // std::cout << "eq: " << sum << "  " << std::get<0>(st.top()).l << "  " << std::get<0>(st.top()).r << "  " << tail->right->val << std::endl;
-                    sum += tail->right->val;
-                    if (!st.empty())
-                    {
-
-                        // tail = std::get<1>(st.top());
-                        // tmp_interval = std::get<0>(st.top());
-                        st.pop();
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-                if (tail->left != nullptr && tmp_interval.l < tail->left->get_right_border())
-                {
-
-                    if (tail->left != nullptr)
-                    {
-                        // std::cout << "left: " << sum << "  " << tmp_interval.l << "  " << std::min(tail->left->get_right_border(), tmp_interval.r) << "  " << tail->val << std::endl;
-                        st.emplace(__interval{tmp_interval.l, std::min(tmp_interval.r, tail->left->get_right_border())}, tail->left);
-                    }
-                    else
-                        break;
+                    break;
                 }
             }
-            else
+            if (tail->right != nullptr && tmp_interval.r > tail->right->get_left_border())
             {
-                break;
+
+                if (tail->right != nullptr)
+                {
+                    // std::cout << "right: " << sum << "  " << tail->right->get_left_border() << "  " << tmp_interval.r << "  " << tail->val << std::endl;
+                    st.emplace(__interval{tail->right->get_left_border(), tmp_interval.r}, tail->right);
+                }
+                else
+                    break;
+            }
+            if (tail->right != nullptr && !st.empty() && std::get<0>(st.top()).l == tail->right->get_left_border() && std::get<0>(st.top()).r == tail->right->get_right_border())
+            {
+                // std::cout << "eq: " << sum << "  " << std::get<0>(st.top()).l << "  " << std::get<0>(st.top()).r << "  " << tail->right->val << std::endl;
+                sum += tail->right->val;
+                if (!st.empty())
+                {
+
+                    // tail = std::get<1>(st.top());
+                    // tmp_interval = std::get<0>(st.top());
+                    st.pop();
+                }
+                else
+                {
+                    break;
+                }
+            }
+            if (tail->left != nullptr && tmp_interval.l < tail->left->get_right_border())
+            {
+
+                if (tail->left != nullptr)
+                {
+                    // std::cout << "left: " << sum << "  " << tmp_interval.l << "  " << std::min(tail->left->get_right_border(), tmp_interval.r) << "  " << tail->val << std::endl;
+                    st.emplace(__interval{tmp_interval.l, std::min(tmp_interval.r, tail->left->get_right_border())}, tail->left);
+                }
+                else
+                    break;
             }
         }
 
@@ -183,8 +179,8 @@ public:
 
 int main()
 {
-    int arr[] = {7, -2, 10, 0, -1, 6, 11, -8, 2, -1};
-    tree_interval<int> a(arr, arr + 10);
+    std::vector<int> arr = {7, -2, 10, 0, -1, 6, 11, -8, 2, -1};
+    tree_interval<int> a(arr.begin(), arr.end());
 
     for (size_t i = 0; i < a.size(); ++i)
     {
